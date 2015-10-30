@@ -18,6 +18,7 @@ package com.github.yongchristophertang.reporter.testcase;
 
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.Collections;
 import java.util.List;
 
@@ -39,12 +40,12 @@ public class TestCaseResult {
     private final String bug;
     private final String caseDescription;
     private final String expectedResult;
-    private final LocalDateTime dateTime;
+    private final String dateTime;
     private final String version = System.getProperty("test_version", "0.0");
 
     private TestCaseResult(int status, String suiteName, String testName, String className, String caseName,
                            long duration, List<String> outputs, boolean configuration, String bug, String caseDescription,
-                           String expectedResult, LocalDateTime dateTime) {
+                           String expectedResult, String dateTime) {
         this.status = status;
 
         this.suiteName = suiteName;
@@ -64,7 +65,7 @@ public class TestCaseResult {
         return configuration;
     }
 
-    public LocalDateTime getDateTime() {
+    public String getDateTime() {
         return dateTime;
     }
 
@@ -143,7 +144,7 @@ public class TestCaseResult {
         private String bugBuilder;
         private String caseDescriptionBuilder;
         private String expectedResultBuilder;
-        private LocalDateTime dateTimeBuilder;
+        private String dateTimeBuilder;
 
         /**
          * A builder that is to create a {@link com.github.yongchristophertang.reporter.testcase.TestCaseResult}.
@@ -220,7 +221,8 @@ public class TestCaseResult {
          * the execution date of this test case
          */
         public TestCaseResultBuilder date(long date) {
-            this.dateTimeBuilder = LocalDateTime.ofEpochSecond(date, 0, ZoneOffset.ofHours(8));
+            this.dateTimeBuilder = LocalDateTime.ofEpochSecond(date / 1000, 0, ZoneOffset.ofHours(8))
+                    .format(DateTimeFormatter.ISO_DATE_TIME);
             return this;
         }
 

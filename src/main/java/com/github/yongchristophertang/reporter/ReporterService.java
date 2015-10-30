@@ -20,10 +20,12 @@ import com.github.yongchristophertang.reporter.annotation.Bug;
 import com.github.yongchristophertang.reporter.annotation.TestCase;
 import com.github.yongchristophertang.reporter.testcase.TestCaseResult;
 import javaslang.Tuple2;
+import javaslang.control.Match;
 import javaslang.control.Try;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.springframework.http.ResponseEntity;
+import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestTemplate;
 import org.testng.*;
 import org.testng.xml.XmlSuite;
@@ -70,6 +72,11 @@ public class ReporterService extends AbstractReporter implements IReporter {
 
         futures.parallelStream()
                 .filter(f -> Try.of(() -> !f._2.get(5, TimeUnit.SECONDS).getStatusCode().is2xxSuccessful())
+                        .recover(t -> Match.of(t).whenType(ResourceAccessException.class)
+                                .then(e -> {
+                                    logger.error("Failed to connect to remote storage", e);
+                                    return true;
+                                }).get())
                         .orElse(true)).forEach(f -> service.submit(new UploadResults(f._1)));
 
         try {
