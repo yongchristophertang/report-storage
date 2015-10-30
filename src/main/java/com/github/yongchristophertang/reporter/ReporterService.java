@@ -1,8 +1,23 @@
+/*
+ * Copyright 2014-2015 the original author or authors.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * You may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package com.github.yongchristophertang.reporter;
 
-import com.github.yongchristophertang.report.annotation.Bug;
-import com.github.yongchristophertang.report.annotation.TestCase;
-import com.github.yongchristophertang.reporter.testcase.ConfigurationEnum;
+import com.github.yongchristophertang.reporter.annotation.Bug;
+import com.github.yongchristophertang.reporter.annotation.TestCase;
 import com.github.yongchristophertang.reporter.testcase.TestCaseResult;
 import javaslang.Tuple2;
 import javaslang.control.Try;
@@ -46,17 +61,16 @@ public class ReporterService extends AbstractReporter implements IReporter {
                         testCase.getTestResult().getEndMillis() - testCase.getTestResult().getStartMillis(),
                         testCase.getTestResult().getStatus(), Reporter.getOutput(testCase.getTestResult()))
                         .className(method.getTestClass().getName()).testName(testCase.getTestResult().getTestName())
-                        .suiteName(suite.getName()).configuration(ConfigurationEnum.AFTER_CLASS)
+                        .suiteName(suite.getName()).configuration(testCase.isConfigurationMethod())
                         .caseDescription(processor.getCaseDescription()).expectedResult(processor.getExpectedResult())
-                        .bug(processor.getBugInfo()).createTestCaseResult();
+                        .bug(processor.getBugInfo()).date(testCase.getDate()).createTestCaseResult();
                 futures.add(new Tuple2<>(result, service.submit(new UploadResults(result))));
             }
         }
 
         futures.parallelStream()
                 .filter(f -> Try.of(() -> !f._2.get(5, TimeUnit.SECONDS).getStatusCode().is2xxSuccessful())
-                        .orElse(true))
-                .forEach(f -> service.submit(new UploadResults(f._1)));
+                        .orElse(true)).forEach(f -> service.submit(new UploadResults(f._1)));
 
         try {
             service.shutdown();
@@ -79,30 +93,15 @@ public class ReporterService extends AbstractReporter implements IReporter {
         }
 
         String getCaseDescription() {
-            TestCase testCase;
-            if ((testCase = method.getAnnotation(TestCase.class)) == null) {
-                return "";
-            } else {
-                return testCase.value();
-            }
+            return Try.of(() -> method.getAnnotation(TestCase.class).value()).orElse("");
         }
 
         String getExpectedResult() {
-            TestCase testCase;
-            if ((testCase = method.getAnnotation(TestCase.class)) == null) {
-                return "";
-            } else {
-                return testCase.expected();
-            }
+            return Try.of(() -> method.getAnnotation(TestCase.class).expected()).orElse("");
         }
 
         String getBugInfo() {
-            Bug bug;
-            if ((bug = method.getAnnotation(Bug.class)) == null) {
-                return null;
-            } else {
-                return bug.value();
-            }
+            return Try.of(() -> method.getAnnotation(Bug.class).value()).orElse(null);
         }
     }
 

@@ -1,5 +1,23 @@
+/*
+ * Copyright 2014-2015 the original author or authors.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * You may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package com.github.yongchristophertang.reporter.testcase;
 
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.Collections;
 import java.util.List;
 
@@ -7,7 +25,7 @@ import java.util.List;
  * Object representative of one test case result.
  *
  * @author Yong Tang
- * @since 1.0
+ * @since 0.1
  */
 public class TestCaseResult {
     private final String suiteName;
@@ -16,26 +34,42 @@ public class TestCaseResult {
     private final String caseName;
     private final long duration;
     private final List<String> outputs;
-    private final ConfigurationEnum configuration;
+    private final boolean configuration;
     private final int status;
     private final String bug;
     private final String caseDescription;
     private final String expectedResult;
+    private final LocalDateTime dateTime;
+    private final String version = System.getProperty("test_version", "0.0");
 
     private TestCaseResult(int status, String suiteName, String testName, String className, String caseName,
-            long duration, List<String> outputs, ConfigurationEnum configuration, String bug, String caseDescription,
-            String expectedResult) {
+                           long duration, List<String> outputs, boolean configuration, String bug, String caseDescription,
+                           String expectedResult, LocalDateTime dateTime) {
         this.status = status;
+
         this.suiteName = suiteName;
         this.testName = testName;
         this.className = className;
         this.caseName = caseName;
         this.duration = duration;
+        this.dateTime = dateTime;
         this.outputs = Collections.unmodifiableList(outputs);
         this.configuration = configuration;
         this.bug = bug;
         this.caseDescription = caseDescription;
         this.expectedResult = expectedResult;
+    }
+
+    public boolean isConfiguration() {
+        return configuration;
+    }
+
+    public LocalDateTime getDateTime() {
+        return dateTime;
+    }
+
+    public String getVersion() {
+        return version;
     }
 
     public int getStatus() {
@@ -44,10 +78,6 @@ public class TestCaseResult {
 
     public long getDuration() {
         return duration;
-    }
-
-    public ConfigurationEnum getConfiguration() {
-        return configuration;
     }
 
     @Override
@@ -64,6 +94,8 @@ public class TestCaseResult {
                 ", bug='" + bug + '\'' +
                 ", caseDescription='" + caseDescription + '\'' +
                 ", expectedResult='" + expectedResult + '\'' +
+                ", dateTime=" + dateTime +
+                ", version='" + version + '\'' +
                 '}';
     }
 
@@ -107,11 +139,20 @@ public class TestCaseResult {
         private String suiteNameBuilder;
         private String testNameBuilder;
         private String classNameBuilder;
-        private ConfigurationEnum configurationBuilder;
+        private boolean configurationBuilder;
         private String bugBuilder;
         private String caseDescriptionBuilder;
         private String expectedResultBuilder;
+        private LocalDateTime dateTimeBuilder;
 
+        /**
+         * A builder that is to create a {@link com.github.yongchristophertang.reporter.testcase.TestCaseResult}.
+         *
+         * @param caseName the name of the test case
+         * @param duration the duration for execution of this test case
+         * @param status   the status of the result for this test case
+         * @param outputs  output logs of this test case
+         */
         public TestCaseResultBuilder(String caseName, long duration, int status, List<String> outputs) {
             this.caseNameBuilder = caseName;
             this.durationBuilder = duration;
@@ -119,45 +160,74 @@ public class TestCaseResult {
             this.outputsBuilder = outputs;
         }
 
+        /**
+         * the name of the suite
+         */
         public TestCaseResultBuilder suiteName(String suiteName) {
             this.suiteNameBuilder = suiteName;
             return this;
         }
 
+        /**
+         * the name of the test
+         */
         public TestCaseResultBuilder testName(String testName) {
             this.testNameBuilder = testName;
             return this;
         }
 
+        /**
+         * the name of the test class
+         */
         public TestCaseResultBuilder className(String className) {
             this.classNameBuilder = className;
             return this;
         }
 
-        public TestCaseResultBuilder configuration(ConfigurationEnum configuration) {
+        /**
+         * is this test method a configuration
+         */
+        public TestCaseResultBuilder configuration(boolean configuration) {
             this.configurationBuilder = configuration;
             return this;
         }
 
+        /**
+         * the bug associated with this test case if applicable
+         */
         public TestCaseResultBuilder bug(String bug) {
             this.bugBuilder = bug;
             return this;
         }
 
+        /**
+         * the case description of this test case
+         */
         public TestCaseResultBuilder caseDescription(String caseDescription) {
             this.caseDescriptionBuilder = caseDescription;
             return this;
         }
 
+        /**
+         * the expected result of this test case
+         */
         public TestCaseResultBuilder expectedResult(String expectedResult) {
             this.expectedResultBuilder = expectedResult;
+            return this;
+        }
+
+        /**
+         * the execution date of this test case
+         */
+        public TestCaseResultBuilder date(long date) {
+            this.dateTimeBuilder = LocalDateTime.ofEpochSecond(date, 0, ZoneOffset.ofHours(8));
             return this;
         }
 
         public TestCaseResult createTestCaseResult() {
             return new TestCaseResult(statusBuilder, suiteNameBuilder, testNameBuilder, classNameBuilder,
                     caseNameBuilder, durationBuilder, outputsBuilder, configurationBuilder, bugBuilder,
-                    caseDescriptionBuilder, expectedResultBuilder);
+                    caseDescriptionBuilder, expectedResultBuilder, dateTimeBuilder);
         }
     }
 
