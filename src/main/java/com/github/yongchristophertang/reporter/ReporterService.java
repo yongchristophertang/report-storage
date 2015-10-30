@@ -20,12 +20,10 @@ import com.github.yongchristophertang.reporter.annotation.Bug;
 import com.github.yongchristophertang.reporter.annotation.TestCase;
 import com.github.yongchristophertang.reporter.testcase.TestCaseResult;
 import javaslang.Tuple2;
-import javaslang.control.Match;
 import javaslang.control.Try;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestTemplate;
 import org.testng.*;
 import org.testng.xml.XmlSuite;
@@ -34,6 +32,7 @@ import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.*;
+import java.util.stream.Collectors;
 
 /**
  * Submit generated test results and associated contexts to remote storage.
@@ -53,7 +52,7 @@ public class ReporterService extends AbstractReporter implements IReporter {
      * tried.
      */
     public void generateReport(List<XmlSuite> xmlSuites, List<ISuite> suites, String outputDirectory) {
-        List<Tuple2<TestCaseResult, Future<ResponseEntity<String>>>> futures = new ArrayList<>();
+        List<Tuple2<TestCaseResult, Future<ResponseEntity<String>>>> futureTuples = new ArrayList<>();
 
         for (ISuite suite : suites) {
             for (IInvokedMethod testCase : suite.getAllInvokedMethods()) {
@@ -66,22 +65,23 @@ public class ReporterService extends AbstractReporter implements IReporter {
                         .suiteName(suite.getName()).configuration(testCase.isConfigurationMethod())
                         .caseDescription(processor.getCaseDescription()).expectedResult(processor.getExpectedResult())
                         .bug(processor.getBugInfo()).date(testCase.getDate()).createTestCaseResult();
-                futures.add(new Tuple2<>(result, service.submit(new UploadResults(result))));
+                futureTuples.add(new Tuple2<>(result, service.submit(new UploadResults(result))));
             }
         }
 
-        futures.parallelStream()
+        // First round attempt to upload results and for failed cases attempt once more
+        List<Future<ResponseEntity<String>>> futures = futureTuples.parallelStream()
                 .filter(f -> Try.of(() -> !f._2.get(5, TimeUnit.SECONDS).getStatusCode().is2xxSuccessful())
-                        .recover(t -> Match.of(t).whenType(ResourceAccessException.class)
-                                .then(e -> {
-                                    logger.error("Failed to connect to remote storage", e);
-                                    return true;
-                                }).get())
-                        .orElse(true)).forEach(f -> service.submit(new UploadResults(f._1)));
+                        .onFailure(t -> logger.error("Failed to upload results to remote storage.", t))
+                        .orElse(true)).map(f -> service.submit(new UploadResults(f._1))).collect(Collectors.toList());
+
+        // Check if all attempts succeeds, if not, prompt notice of errors
+        logger.error("There are " + futures.parallelStream().filter(f -> Try.of(() -> !f.get(5, TimeUnit.SECONDS)
+                .getStatusCode().is2xxSuccessful()).orElse(true)).count() + " cases failed to upload to remote storage.");
 
         try {
             service.shutdown();
-            if (!service.awaitTermination(5, TimeUnit.SECONDS)) {
+            if (!service.awaitTermination(2, TimeUnit.SECONDS)) {
                 service.shutdownNow();
             }
         } catch (InterruptedException e) {
