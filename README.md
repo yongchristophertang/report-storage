@@ -20,7 +20,7 @@ report-storage now provides a SNAPSHOT download from ossrh repository:
 ```
 
 ## Upload test results to a remote storage
-The remote storage should provide an RESTful HTTP URL for accepting upcoming test results case by case. The configuration of this URL can be set in an application.conf/application.properties/application.json file residing in the classpath.
+The remote storage should provide an RESTful HTTP URL for accepting upcoming test results case by case. The configuration of this URL can be set in an application.conf/application.properties/application.json file residing in the classpath. All test contexts regarding each test case (including configuration) will be packed in a json string and be posted to the configured URL.
 
 Take application.conf as an example, more information about how to set other format can be found in documents of [Typesage Config](https://github.com/typesafehub/config):
 
