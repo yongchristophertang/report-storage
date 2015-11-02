@@ -42,10 +42,9 @@ import java.util.stream.Collectors;
  * @since 0.1
  */
 public class ReporterService extends AbstractReporter implements IReporter {
-    static final int THREAD_POOL_SIZE = 10;
     private static final Logger logger = LogManager.getLogger();
     private final RestTemplate restTemplate = new RestTemplate();
-    private final ExecutorService service = Executors.newFixedThreadPool(THREAD_POOL_SIZE);
+    private final ExecutorService service = Executors.newCachedThreadPool();
 
     /**
      * Submit all results asynchronously to remote storage with location at {@link #getUrl()}.
