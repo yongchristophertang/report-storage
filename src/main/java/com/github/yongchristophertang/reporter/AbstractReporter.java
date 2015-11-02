@@ -32,6 +32,7 @@ abstract class AbstractReporter {
     static final String STORAGE_HOST = "report.storage.host";
     static final String STORAGE_PORT = "report.storage.port";
     static final String STORAGE_PATH = "report.storage.path";
+    static final String USAGE_COMPANY = "report.usage.company";
     private final Config config;
 
     AbstractReporter() {
@@ -48,5 +49,9 @@ abstract class AbstractReporter {
         return sb.append(protocol == null ? "http://" : protocol + "://").append(host)
                 .append(host.matches("^(?:[0-9]{1,3}\\.){3}[0-9]{1,3}$") ? ":" + port : "")
                 .append(path.startsWith("/") ? path : "/" + path).toString();
+    }
+
+    protected final String getUsageCompany() {
+        return config.getString(USAGE_COMPANY);
     }
 }

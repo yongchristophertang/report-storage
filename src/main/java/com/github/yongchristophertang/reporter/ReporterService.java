@@ -16,12 +16,21 @@
 
 package com.github.yongchristophertang.reporter;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.yongchristophertang.reporter.annotation.Bug;
 import com.github.yongchristophertang.reporter.annotation.TestCase;
 import com.github.yongchristophertang.reporter.testcase.TestCaseResult;
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.collect.Lists;
 import javaslang.Tuple2;
 import javaslang.control.Try;
+import org.apache.http.HttpResponse;
+import org.apache.http.client.HttpClient;
+import org.apache.http.client.entity.UrlEncodedFormEntity;
+import org.apache.http.client.methods.HttpPost;
+import org.apache.http.impl.client.HttpClientBuilder;
+import org.apache.http.message.BasicNameValuePair;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.springframework.http.ResponseEntity;
@@ -45,6 +54,8 @@ public class ReporterService extends AbstractReporter implements IReporter {
     private static final Logger logger = LogManager.getLogger();
     private final RestTemplate restTemplate = new RestTemplate();
     private final ExecutorService service = Executors.newCachedThreadPool();
+    private final HttpClient client = HttpClientBuilder.create().build();
+    private final String company = getUsageCompany();
 
     /**
      * Submit all results asynchronously to remote storage with location at {@link #getUrl()}.
@@ -52,7 +63,7 @@ public class ReporterService extends AbstractReporter implements IReporter {
      * tried.
      */
     public void generateReport(List<XmlSuite> xmlSuites, List<ISuite> suites, String outputDirectory) {
-        List<Tuple2<TestCaseResult, Future<ResponseEntity<String>>>> futureTuples = new ArrayList<>();
+        List<Tuple2<TestCaseResult, Future<Boolean>>> futureTuples = new ArrayList<>();
 
         for (ISuite suite : suites) {
             for (IInvokedMethod testCase : suite.getAllInvokedMethods()) {
@@ -65,21 +76,28 @@ public class ReporterService extends AbstractReporter implements IReporter {
                         .suiteName(suite.getName()).configuration(testCase.isConfigurationMethod())
                         .caseDescription(processor.getCaseDescription()).expectedResult(processor.getExpectedResult())
                         .bug(processor.getBugInfo()).date(testCase.getDate()).createTestCaseResult();
-                futureTuples.add(new Tuple2<>(result, service.submit(new UploadResults(result))));
+                if (logger.isDebugEnabled()) {
+                    logger.debug(result);
+                }
+                futureTuples.add(new Tuple2<>(result, service.submit(
+                        company.equals("iflytek") ? new UploadResultsUsingHttpClient(result) :
+                                new UploadResults(result))));
             }
         }
 
         // First round attempt to upload results, and for failed cases attempt once more
-        List<Future<ResponseEntity<String>>> futures = futureTuples.parallelStream()
-                .filter(f -> Try.of(() -> !f._2.get(5, TimeUnit.SECONDS).getStatusCode().is2xxSuccessful())
-                        .onFailure(t -> logger.error("Failed to upload results to remote storage.", t))
-                        .orElse(true)).map(f -> service.submit(new UploadResults(f._1))).collect(Collectors.toList());
+        List<Future<Boolean>> futures = futureTuples.parallelStream()
+                .filter(f -> Try.of(() -> !f._2.get(5, TimeUnit.SECONDS))
+                        .onFailure(t -> logger.error("Failed to upload results to remote storage.", t)).orElse(true))
+                .map(f -> service.submit(company.equals("iflytek") ? new UploadResultsUsingHttpClient(f._1) :
+                        new UploadResults(f._1))).collect(Collectors.toList());
 
         // Check if all attempts succeed, if not, prompt notice of errors
-        long count = futures.parallelStream()
-                .filter(f -> Try.of(() -> !f.get(5, TimeUnit.SECONDS).getStatusCode().is2xxSuccessful()).orElse(true))
-                .count();
-        logger.error("There are " + count + " cases failed to upload to remote storage.");
+        if (futures.size() > 0) {
+            logger.error("There are " + futures.parallelStream()
+                    .filter(f -> Try.of(() -> !f.get(5, TimeUnit.SECONDS)).orElse(true))
+                    .count() + " cases failed to upload to remote storage.");
+        }
 
         try {
             service.shutdown();
@@ -123,9 +141,9 @@ public class ReporterService extends AbstractReporter implements IReporter {
     }
 
     /**
-     * Async callable service for uploading test results.
+     * Async callable service for uploading test results using {@link RestTemplate}
      */
-    private class UploadResults implements Callable<ResponseEntity<String>> {
+    private class UploadResults implements Callable<Boolean> {
         private final TestCaseResult result;
 
         UploadResults(TestCaseResult result) {
@@ -136,13 +154,44 @@ public class ReporterService extends AbstractReporter implements IReporter {
          * {@inheritDoc}
          */
         @Override
-        public ResponseEntity<String> call() throws Exception {
+        public Boolean call() throws Exception {
             ResponseEntity<String> response = restTemplate.postForEntity(getUrl(), this.result, String.class);
             if (logger.isDebugEnabled()) {
                 logger.debug("Test case result about to submit: ", result);
                 logger.debug("Remote storage responds: ", response);
             }
-            return response;
+            return response.getStatusCode().is2xxSuccessful();
+        }
+    }
+
+    /**
+     * Async callable service for uploading test results using {@link HttpClient}
+     */
+    private class UploadResultsUsingHttpClient implements Callable<Boolean> {
+        private final TestCaseResult result;
+
+        UploadResultsUsingHttpClient(TestCaseResult result) {
+            this.result = result;
+        }
+
+        /**
+         * {@inheritDoc}
+         */
+        @Override
+        public Boolean call() throws Exception {
+            HttpPost post = new HttpPost(getUrl());
+            post.setEntity(new UrlEncodedFormEntity(Lists.newArrayList(new BasicNameValuePair("info_type", "json"),
+                    new BasicNameValuePair("other_info",
+                            new ObjectMapper().setSerializationInclusion(JsonInclude.Include.NON_NULL)
+                                    .writeValueAsString(result)))));
+            HttpResponse response = client.execute(post);
+            if (logger.isDebugEnabled()) {
+                logger.debug("Request sent:");
+                logger.debug(post);
+                logger.debug("Response received:");
+                logger.debug(response);
+            }
+            return response.getStatusLine().getStatusCode() == 200;
         }
     }
 }

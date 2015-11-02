@@ -25,7 +25,7 @@
 	</Appenders>
 
 	<Loggers>
-		<logger name="com.github.yongchristophertang" level="info" additivity="false">
+		<logger name="com.github.yongchristophertang" level="debug" additivity="false">
 			<AppenderRef ref="STDOUT" />
 		</logger>
 
