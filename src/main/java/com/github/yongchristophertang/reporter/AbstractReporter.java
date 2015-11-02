@@ -32,7 +32,7 @@ abstract class AbstractReporter {
     static final String STORAGE_HOST = "report.storage.host";
     static final String STORAGE_PORT = "report.storage.port";
     static final String STORAGE_PATH = "report.storage.path";
-    private Config config;
+    private final Config config;
 
     AbstractReporter() {
         config = ConfigFactory.load();

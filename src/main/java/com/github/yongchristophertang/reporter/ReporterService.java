@@ -19,6 +19,7 @@ package com.github.yongchristophertang.reporter;
 import com.github.yongchristophertang.reporter.annotation.Bug;
 import com.github.yongchristophertang.reporter.annotation.TestCase;
 import com.github.yongchristophertang.reporter.testcase.TestCaseResult;
+import com.google.common.annotations.VisibleForTesting;
 import javaslang.Tuple2;
 import javaslang.control.Try;
 import org.apache.logging.log4j.LogManager;
@@ -69,15 +70,17 @@ public class ReporterService extends AbstractReporter implements IReporter {
             }
         }
 
-        // First round attempt to upload results and for failed cases attempt once more
+        // First round attempt to upload results, and for failed cases attempt once more
         List<Future<ResponseEntity<String>>> futures = futureTuples.parallelStream()
                 .filter(f -> Try.of(() -> !f._2.get(5, TimeUnit.SECONDS).getStatusCode().is2xxSuccessful())
                         .onFailure(t -> logger.error("Failed to upload results to remote storage.", t))
                         .orElse(true)).map(f -> service.submit(new UploadResults(f._1))).collect(Collectors.toList());
 
-        // Check if all attempts succeeds, if not, prompt notice of errors
-        logger.error("There are " + futures.parallelStream().filter(f -> Try.of(() -> !f.get(5, TimeUnit.SECONDS)
-                .getStatusCode().is2xxSuccessful()).orElse(true)).count() + " cases failed to upload to remote storage.");
+        // Check if all attempts succeed, if not, prompt notice of errors
+        long count = futures.parallelStream()
+                .filter(f -> Try.of(() -> !f.get(5, TimeUnit.SECONDS).getStatusCode().is2xxSuccessful()).orElse(true))
+                .count();
+        logger.error("There are " + count + " cases failed to upload to remote storage.");
 
         try {
             service.shutdown();
@@ -90,9 +93,17 @@ public class ReporterService extends AbstractReporter implements IReporter {
     }
 
     /**
+     * Only available for testing purpose, DO NOT USE IN DEV CODES!
+     */
+    @VisibleForTesting
+    CasePostProcessor getCasePostProcessor(ITestNGMethod method) {
+        return new CasePostProcessor(method);
+    }
+
+    /**
      * Internal test case processor for handling with {@link Bug} and {@link TestCase} annotations.
      */
-    private class CasePostProcessor {
+    class CasePostProcessor {
         private final Method method;
 
         CasePostProcessor(ITestNGMethod method) {
@@ -115,7 +126,7 @@ public class ReporterService extends AbstractReporter implements IReporter {
     /**
      * Async callable service for uploading test results.
      */
-    class UploadResults implements Callable<ResponseEntity<String>> {
+    private class UploadResults implements Callable<ResponseEntity<String>> {
         private final TestCaseResult result;
 
         UploadResults(TestCaseResult result) {
