@@ -35,6 +35,12 @@ report {
 }
 ```
 
+The acutal test case details are packed in the post body as a json struct which then are transmitted to remote storage through HTTP request.
+
+```json
+{"suiteName":"Custom suite","testName":null,"className":"com.github.yongchristophertang.reporter.ReporterServiceFunctionalTest","caseName":"setUp","duration":76,"outputs":[],"configuration":true,"status":1,"bug":null,"caseDescription":"","expectedResult":"","dateTime":"2015-11-03T10:31:03","version":"0.0"}
+```
+
 ## Enhanced test method annotations
 Two more specific annotations which can be applied to a test method are developed in this project as well:
 

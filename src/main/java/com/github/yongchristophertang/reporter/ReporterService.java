@@ -79,7 +79,11 @@ public class ReporterService extends AbstractReporter implements IReporter {
         long count = futures.parallelStream()
                 .filter(f -> Try.of(() -> !f.get(5, TimeUnit.SECONDS).getStatusCode().is2xxSuccessful()).orElse(true))
                 .count();
-        logger.error("There are " + count + " cases failed to upload to remote storage.");
+        if (count > 0) {
+            logger.error("There are {} cases failed to upload to remote storage.", count);
+        } else {
+            logger.info("All test case results have been successfully transmitted to remote storage");
+        }
 
         try {
             service.shutdown();
@@ -139,8 +143,8 @@ public class ReporterService extends AbstractReporter implements IReporter {
         public ResponseEntity<String> call() throws Exception {
             ResponseEntity<String> response = restTemplate.postForEntity(getUrl(), this.result, String.class);
             if (logger.isDebugEnabled()) {
-                logger.debug("Test case result about to submit: ", result);
-                logger.debug("Remote storage responds: ", response);
+                logger.debug("Test case result about to submit: {}", result);
+                logger.debug("Remote storage responds: {}", response);
             }
             return response;
         }
