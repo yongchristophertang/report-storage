@@ -33,7 +33,6 @@ import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.message.BasicNameValuePair;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.client.RestTemplate;
 import org.testng.*;
 import org.testng.xml.XmlSuite;
@@ -55,7 +54,6 @@ public class ReporterService extends AbstractReporter implements IReporter {
     private final RestTemplate restTemplate = new RestTemplate();
     private final ExecutorService service = Executors.newCachedThreadPool();
     private final HttpClient client = HttpClientBuilder.create().build();
-    private final String company = getUsageCompany();
 
     /**
      * Submit all results asynchronously to remote storage with location at {@link #getUrl()}.
@@ -77,11 +75,9 @@ public class ReporterService extends AbstractReporter implements IReporter {
                         .caseDescription(processor.getCaseDescription()).expectedResult(processor.getExpectedResult())
                         .bug(processor.getBugInfo()).date(testCase.getDate()).createTestCaseResult();
                 if (logger.isDebugEnabled()) {
-                    logger.debug(result);
+                    logger.debug("Test case details about to send: {}", result);
                 }
-                futureTuples.add(new Tuple2<>(result, service.submit(
-                        company.equals("iflytek") ? new UploadResultsUsingHttpClient(result) :
-                                new UploadResults(result))));
+                futureTuples.add(new Tuple2<>(result, service.submit(new UploadResults(result))));
             }
         }
 
@@ -89,14 +85,17 @@ public class ReporterService extends AbstractReporter implements IReporter {
         List<Future<Boolean>> futures = futureTuples.parallelStream()
                 .filter(f -> Try.of(() -> !f._2.get(5, TimeUnit.SECONDS))
                         .onFailure(t -> logger.error("Failed to upload results to remote storage.", t)).orElse(true))
-                .map(f -> service.submit(company.equals("iflytek") ? new UploadResultsUsingHttpClient(f._1) :
-                        new UploadResults(f._1))).collect(Collectors.toList());
+                .map(f -> service.submit(new UploadResults(f._1))).collect(Collectors.toList());
 
         // Check if all attempts succeed, if not, prompt notice of errors
         if (futures.size() > 0) {
-            logger.error("There are " + futures.parallelStream()
-                    .filter(f -> Try.of(() -> !f.get(5, TimeUnit.SECONDS)).orElse(true))
-                    .count() + " cases failed to upload to remote storage.");
+            long count = futures.parallelStream().filter(f -> Try.of(() -> !f.get(5, TimeUnit.SECONDS)).orElse(true))
+                    .count();
+            if (count > 0) {
+                logger.error("There are {} cases failed to upload to remote storage.", count);
+            } else {
+                logger.info("All test results have been successfully transmitted to remote storage.");
+            }
         }
 
         try {
@@ -141,7 +140,7 @@ public class ReporterService extends AbstractReporter implements IReporter {
     }
 
     /**
-     * Async callable service for uploading test results using {@link RestTemplate}
+     * Async callable service for uploading test results using {@link HttpClient}
      */
     private class UploadResults implements Callable<Boolean> {
         private final TestCaseResult result;
@@ -155,41 +154,25 @@ public class ReporterService extends AbstractReporter implements IReporter {
          */
         @Override
         public Boolean call() throws Exception {
-            ResponseEntity<String> response = restTemplate.postForEntity(getUrl(), this.result, String.class);
-            if (logger.isDebugEnabled()) {
-                logger.debug("Test case result about to submit: ", result);
-                logger.debug("Remote storage responds: ", response);
-            }
-            return response.getStatusCode().is2xxSuccessful();
-        }
-    }
-
-    /**
-     * Async callable service for uploading test results using {@link HttpClient}
-     */
-    private class UploadResultsUsingHttpClient implements Callable<Boolean> {
-        private final TestCaseResult result;
-
-        UploadResultsUsingHttpClient(TestCaseResult result) {
-            this.result = result;
-        }
-
-        /**
-         * {@inheritDoc}
-         */
-        @Override
-        public Boolean call() throws Exception {
             HttpPost post = new HttpPost(getUrl());
             post.setEntity(new UrlEncodedFormEntity(Lists.newArrayList(new BasicNameValuePair("info_type", "json"),
                     new BasicNameValuePair("other_info",
                             new ObjectMapper().setSerializationInclusion(JsonInclude.Include.NON_NULL)
-                                    .writeValueAsString(result)))));
+                                    .writeValueAsString(result)), new BasicNameValuePair("queue_task_id", "1"),
+                    new BasicNameValuePair("task_id", "2"), new BasicNameValuePair("user_id", "3"),
+                    new BasicNameValuePair("user_name", "tester"),
+                    new BasicNameValuePair("script_name", result.getCaseName()),
+                    new BasicNameValuePair("testcase_no", result.getCaseName()),
+                    new BasicNameValuePair("testsuite_no", result.getSuiteName()),
+                    new BasicNameValuePair("testdescription", result.getCaseDescription()),
+                    new BasicNameValuePair("expect_result", result.getExpectedResult()),
+                    new BasicNameValuePair("actual_result", "n/a"),
+                    new BasicNameValuePair("is_success", String.valueOf(result.getStatus())),
+                    new BasicNameValuePair("run_time", String.valueOf(result.getDuration())))));
             HttpResponse response = client.execute(post);
             if (logger.isDebugEnabled()) {
-                logger.debug("Request sent:");
-                logger.debug(post);
-                logger.debug("Response received:");
-                logger.debug(response);
+                logger.debug("Request sent: {}", post);
+                logger.debug("Response received: {}", response);
             }
             return response.getStatusLine().getStatusCode() == 200;
         }

@@ -1,6 +1,8 @@
 # report-storage
 report-storage is a [TestNG](http://testng.org) plugin which can be used to submit testing results to a user-defined remote storage case by case, with some case marking features as well.
 
+This is a branch version target for iFlyTek internal use.
+
 Note: report-storage requires a JAVA SE 1.8 or above environment to run.
 
 ## Download
