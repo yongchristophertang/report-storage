@@ -28,6 +28,6 @@ import org.junit.Test;
 public class AbstractReporterTest extends AbstractReporter {
     @Test
     public void testGetUrlWithDefaultSettings() {
-        Assert.assertEquals(getUrl(), "http://127.0.0.1:8080/api");
+        Assert.assertEquals(getStorageConfig().getUrl(), "http://127.0.0.1:8080/api");
     }
 }

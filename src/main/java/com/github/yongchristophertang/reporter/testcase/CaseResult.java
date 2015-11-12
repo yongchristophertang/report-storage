@@ -16,61 +16,64 @@
 
 package com.github.yongchristophertang.reporter.testcase;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 
 /**
- * Object representative of one test case result.
+ * Model representative of one test case result.
  *
  * @author Yong Tang
  * @since 0.1
  */
-public class TestCaseResult {
+@JsonInclude(JsonInclude.Include.NON_NULL)
+public class CaseResult {
     private final String suiteName;
     private final String testName;
     private final String className;
-    private final String caseName;
+    private final String name;
     private final long duration;
+    @JsonProperty("testLog")
     private final List<String> outputs;
-    private final boolean configuration;
+    private final boolean isConfiguration;
     private final int status;
     private final String bug;
+    @JsonProperty("description")
     private final String caseDescription;
     private final String expectedResult;
     private final String dateTime;
-    private final String version = System.getProperty("test_version", "0.0");
 
-    private TestCaseResult(int status, String suiteName, String testName, String className, String caseName,
-                           long duration, List<String> outputs, boolean configuration, String bug, String caseDescription,
-                           String expectedResult, String dateTime) {
+    private CaseResult(int status, String suiteName, String testName, String className, String name,
+        long duration, List<String> outputs, boolean isConfiguration, String bug, String caseDescription,
+        String expectedResult, String dateTime) {
         this.status = status;
 
         this.suiteName = suiteName;
         this.testName = testName;
         this.className = className;
-        this.caseName = caseName;
+        this.name = name;
         this.duration = duration;
         this.dateTime = dateTime;
         this.outputs = Collections.unmodifiableList(outputs);
-        this.configuration = configuration;
+        this.isConfiguration = isConfiguration;
         this.bug = bug;
         this.caseDescription = caseDescription;
         this.expectedResult = expectedResult;
     }
 
+    @JsonProperty("isConfiguration")
     public boolean isConfiguration() {
-        return configuration;
+        return isConfiguration;
     }
 
     public String getDateTime() {
         return dateTime;
-    }
-
-    public String getVersion() {
-        return version;
     }
 
     public int getStatus() {
@@ -84,87 +87,89 @@ public class TestCaseResult {
     @Override
     public String toString() {
         return "TestCaseResult{" +
-                "suiteName='" + suiteName + '\'' +
-                ", testName='" + testName + '\'' +
-                ", className='" + className + '\'' +
-                ", caseName='" + caseName + '\'' +
-                ", duration=" + duration +
-                ", outputs=" + outputs +
-                ", configuration=" + configuration +
-                ", status=" + status +
-                ", bug='" + bug + '\'' +
-                ", caseDescription='" + caseDescription + '\'' +
-                ", expectedResult='" + expectedResult + '\'' +
-                ", dateTime=" + dateTime +
-                ", version='" + version + '\'' +
-                '}';
+            "suiteName='" + suiteName + '\'' +
+            ", testName='" + testName + '\'' +
+            ", className='" + className + '\'' +
+            ", name='" + name + '\'' +
+            ", duration=" + duration +
+            ", outputs=" + outputs +
+            ", isConfiguration=" + isConfiguration +
+            ", status=" + status +
+            ", bug='" + bug + '\'' +
+            ", caseDescription='" + caseDescription + '\'' +
+            ", expectedResult='" + expectedResult + '\'' +
+            ", dateTime=" + dateTime +
+            '}';
     }
 
-    public String getBug() {
-        return bug;
+    public List<String> getBug() {
+        return bug == null ? null : Arrays.asList(bug);
     }
 
-    public String getCaseDescription() {
-        return caseDescription;
+    public List<String> getCaseDescription() {
+        return caseDescription == null ? null : Arrays.asList(caseDescription);
     }
 
-    public String getExpectedResult() {
-        return expectedResult;
+    public List<String> getExpectedResult() {
+        return expectedResult == null ? null : Arrays.asList(expectedResult);
     }
 
-    public String getSuiteName() {
-        return suiteName;
+    public List<String> getSuiteName() {
+        return suiteName == null ? null : Arrays.asList(suiteName);
     }
 
-    public String getTestName() {
-        return testName;
+    public List<String> getTestName() {
+        return testName == null ? null : Arrays.asList(testName);
     }
 
-    public String getClassName() {
-        return className;
+    public List<String> getClassName() {
+        return className == null ? null : Arrays.asList(className);
     }
 
-    public String getCaseName() {
-        return caseName;
+    public String getName() {
+        return name;
     }
 
     public List<String> getOutputs() {
         return outputs;
     }
 
-    public static final class TestCaseResultBuilder {
-        private final String caseNameBuilder;
+    public static final class CaseResultBuilder {
+        private final String nameBuilder;
         private final long durationBuilder;
         private final List<String> outputsBuilder;
         private final int statusBuilder;
+        private final boolean isConfigurationBuilder;
         private String suiteNameBuilder;
         private String testNameBuilder;
         private String classNameBuilder;
-        private boolean configurationBuilder;
         private String bugBuilder;
         private String caseDescriptionBuilder;
         private String expectedResultBuilder;
         private String dateTimeBuilder;
 
         /**
-         * A builder that is to create a {@link com.github.yongchristophertang.reporter.testcase.TestCaseResult}.
+         * A builder that is to create a {@link CaseResult}.
          *
-         * @param caseName the name of the test case
-         * @param duration the duration for execution of this test case
-         * @param status   the status of the result for this test case
-         * @param outputs  output logs of this test case
+         * @param name            the name of the test case
+         * @param duration        the duration for execution of this test case
+         * @param status          the status of the result for this test case
+         * @param outputs         output logs of this test case
+         * @param isConfiguration is this case a configuration or not
          */
-        public TestCaseResultBuilder(String caseName, long duration, int status, List<String> outputs) {
-            this.caseNameBuilder = caseName;
+        public CaseResultBuilder(String name, long duration, int status, List<String> outputs,
+            boolean isConfiguration) {
+            this.nameBuilder = name;
             this.durationBuilder = duration;
             this.statusBuilder = status;
             this.outputsBuilder = outputs;
+            this.isConfigurationBuilder = isConfiguration;
         }
 
         /**
-         * the name of the suite
+         * the name of the withSuite
          */
-        public TestCaseResultBuilder suiteName(String suiteName) {
+        public CaseResultBuilder suiteName(String suiteName) {
             this.suiteNameBuilder = suiteName;
             return this;
         }
@@ -172,7 +177,7 @@ public class TestCaseResult {
         /**
          * the name of the test
          */
-        public TestCaseResultBuilder testName(String testName) {
+        public CaseResultBuilder testName(String testName) {
             this.testNameBuilder = testName;
             return this;
         }
@@ -180,23 +185,15 @@ public class TestCaseResult {
         /**
          * the name of the test class
          */
-        public TestCaseResultBuilder className(String className) {
+        public CaseResultBuilder className(String className) {
             this.classNameBuilder = className;
-            return this;
-        }
-
-        /**
-         * is this test method a configuration
-         */
-        public TestCaseResultBuilder configuration(boolean configuration) {
-            this.configurationBuilder = configuration;
             return this;
         }
 
         /**
          * the bug associated with this test case if applicable
          */
-        public TestCaseResultBuilder bug(String bug) {
+        public CaseResultBuilder bug(String bug) {
             this.bugBuilder = bug;
             return this;
         }
@@ -204,7 +201,7 @@ public class TestCaseResult {
         /**
          * the case description of this test case
          */
-        public TestCaseResultBuilder caseDescription(String caseDescription) {
+        public CaseResultBuilder caseDescription(String caseDescription) {
             this.caseDescriptionBuilder = caseDescription;
             return this;
         }
@@ -212,7 +209,7 @@ public class TestCaseResult {
         /**
          * the expected result of this test case
          */
-        public TestCaseResultBuilder expectedResult(String expectedResult) {
+        public CaseResultBuilder expectedResult(String expectedResult) {
             this.expectedResultBuilder = expectedResult;
             return this;
         }
@@ -220,16 +217,16 @@ public class TestCaseResult {
         /**
          * the execution date of this test case
          */
-        public TestCaseResultBuilder date(long date) {
+        public CaseResultBuilder date(long date) {
             this.dateTimeBuilder = LocalDateTime.ofEpochSecond(date / 1000, 0, ZoneOffset.ofHours(8))
-                    .format(DateTimeFormatter.ISO_DATE_TIME);
+                .format(DateTimeFormatter.ISO_DATE_TIME);
             return this;
         }
 
-        public TestCaseResult createTestCaseResult() {
-            return new TestCaseResult(statusBuilder, suiteNameBuilder, testNameBuilder, classNameBuilder,
-                    caseNameBuilder, durationBuilder, outputsBuilder, configurationBuilder, bugBuilder,
-                    caseDescriptionBuilder, expectedResultBuilder, dateTimeBuilder);
+        public CaseResult createTestCaseResult() {
+            return new CaseResult(statusBuilder, suiteNameBuilder, testNameBuilder, classNameBuilder,
+                nameBuilder, durationBuilder, outputsBuilder, isConfigurationBuilder, bugBuilder,
+                caseDescriptionBuilder, expectedResultBuilder, dateTimeBuilder);
         }
     }
 

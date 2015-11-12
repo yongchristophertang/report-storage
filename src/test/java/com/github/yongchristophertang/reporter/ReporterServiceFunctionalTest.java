@@ -1,7 +1,9 @@
 package com.github.yongchristophertang.reporter;
 
+import com.github.yongchristophertang.reporter.annotation.TestCase;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.testng.Reporter;
 import org.testng.annotations.BeforeClass;
 import org.testng.annotations.Listeners;
 import org.testng.annotations.Test;
@@ -19,12 +21,15 @@ public class ReporterServiceFunctionalTest {
     @BeforeClass
     public void setUp() {
         logger.info("before");
+        Reporter.log("before");
 //        new Thread(new EmbeddedServer()).start();
     }
 
     @Test
+    @TestCase(value = "test description", expected = "no signals")
     public void testDemo() {
         logger.info("test");
+        Reporter.log("test");
     }
 
 //    private class EmbeddedServer extends AbstractHandler implements Runnable {

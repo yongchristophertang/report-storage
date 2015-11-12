@@ -5,9 +5,9 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>com.github.yongchristophertang</groupId>
-    <artifactId>report-storage</artifactId>
-    <version>0.1-SNAPSHOT</version>
-    <name>report-storage</name>
+    <artifactId>report-storage-iflytek</artifactId>
+    <version>0.2.1</version>
+    <name>report-storage-iflytek</name>
     <packaging>jar</packaging>
     <description>A TestNG plugin for uploading test contexts to remote storage</description>
     <url>https://github.com/yongchristophertang/report-storage</url>
@@ -19,30 +19,32 @@
         </developer>
     </developers>
 
-    <licenses>
+    <!--licenses>
         <license>
             <name>Apache Licence, Version 2.0</name>
             <url>http://www.apache.org/licenses/LICENSE-2.0.html</url>
             <distribution>repo</distribution>
         </license>
-    </licenses>
-
-    <scm>
-        <connection>scm:git:git@github.com:yongchristophertang/RestConnector.git</connection>
-        <developerConnection>scm:git:git@github.com:yongchristophertang/RestConnector.git</developerConnection>
-        <url>git@github.com:yongchristophertang/RestConnector.git</url>
-    </scm>
+    </licenses-->
 
     <properties>
         <file.encoding>UTF-8</file.encoding>
     </properties>
 
     <distributionManagement>
-        <snapshotRepository>
-            <id>ossrh</id>
-            <url>https://oss.sonatype.org/content/repositories/snapshots</url>
-        </snapshotRepository>
+        <repository>
+            <id>iflytek-test</id>
+            <url>http://192.168.58.38:8081/nexus/content/repositories/ICA20/</url>
+        </repository>
     </distributionManagement>
+
+    <repositories>
+        <repository>
+            <id>iflytek-test</id>
+            <name>iflytek company maven repo</name>
+            <url>http://192.168.58.38:8081/nexus/content/groups/public/</url>
+        </repository>
+    </repositories>
 
     <dependencies>
         <!-- testng -->
@@ -76,33 +78,21 @@
         <dependency>
             <groupId>org.springframework</groupId>
             <artifactId>spring-web</artifactId>
-            <version>4.1.2.RELEASE</version>
-        </dependency>
-
-        <dependency>
-            <groupId>org.apache.httpcomponents</groupId>
-            <artifactId>httpclient</artifactId>
-            <version>4.5.1</version>
-        </dependency>
-
-        <dependency>
-            <groupId>org.apache.httpcomponents</groupId>
-            <artifactId>fluent-hc</artifactId>
-            <version>4.5.1</version>
+            <version>4.2.2.RELEASE</version>
         </dependency>
 
         <!-- jackson for json binding -->
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
-            <version>2.4.4</version>
+            <version>[2.6.0,)</version>
         </dependency>
 
         <!-- javaslang for functional programming -->
         <dependency>
             <groupId>com.javaslang</groupId>
             <artifactId>javaslang</artifactId>
-            <version>2.0.0-beta</version>
+            <version>[2.0.0-beta,)</version>
         </dependency>
 
         <!-- mock framework for unit testing -->
@@ -116,7 +106,7 @@
         <dependency>
             <groupId>com.google.guava</groupId>
             <artifactId>guava</artifactId>
-            <version>18.0</version>
+            <version>[18.0,)</version>
         </dependency>
 
     </dependencies>
@@ -129,7 +119,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.2</version>
+                <version>3.3</version>
                 <configuration>
                     <source>1.8</source>
                     <target>1.8</target>
@@ -139,23 +129,8 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-jar-plugin</artifactId>
+                <version>2.5</version>
             </plugin>
-            <!--plugin>
-                <artifactId>maven-assembly-plugin</artifactId>
-                <executions>
-                    <execution>
-                        <phase>package</phase>
-                        <goals>
-                            <goal>single</goal>
-                        </goals>
-                    </execution>
-                </executions>
-                <configuration>
-                    <descriptorRefs>
-                        <descriptorRef>jar-with-dependencies</descriptorRef>
-                    </descriptorRefs>
-                </configuration>
-            </plugin-->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-deploy-plugin</artifactId>
@@ -186,32 +161,8 @@
                         </goals>
                         <configuration>
                             <additionalparam>-Xdoclint:none</additionalparam>
+                            <charset>utf-8</charset>
                         </configuration>
-                    </execution>
-                </executions>
-            </plugin>
-            <plugin>
-                <groupId>org.sonatype.plugins</groupId>
-                <artifactId>nexus-staging-maven-plugin</artifactId>
-                <version>1.6.3</version>
-                <extensions>true</extensions>
-                <configuration>
-                    <serverId>ossrh</serverId>
-                    <nexusUrl>https://oss.sonatype.org/</nexusUrl>
-                    <autoReleaseAfterClose>true</autoReleaseAfterClose>
-                </configuration>
-            </plugin>
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-gpg-plugin</artifactId>
-                <version>1.5</version>
-                <executions>
-                    <execution>
-                        <id>sign-artifacts</id>
-                        <phase>verify</phase>
-                        <goals>
-                            <goal>sign</goal>
-                        </goals>
                     </execution>
                 </executions>
             </plugin>

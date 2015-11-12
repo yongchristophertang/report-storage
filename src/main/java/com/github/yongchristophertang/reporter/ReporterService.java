@@ -17,22 +17,16 @@
 package com.github.yongchristophertang.reporter;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.yongchristophertang.reporter.annotation.Bug;
 import com.github.yongchristophertang.reporter.annotation.TestCase;
-import com.github.yongchristophertang.reporter.testcase.TestCaseResult;
+import com.github.yongchristophertang.reporter.testcase.*;
+import com.github.yongchristophertang.reporter.testcase.SuiteResult;
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.collect.Lists;
 import javaslang.Tuple2;
 import javaslang.control.Try;
-import org.apache.http.HttpResponse;
-import org.apache.http.client.HttpClient;
-import org.apache.http.client.entity.UrlEncodedFormEntity;
-import org.apache.http.client.methods.HttpPost;
-import org.apache.http.impl.client.HttpClientBuilder;
-import org.apache.http.message.BasicNameValuePair;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.client.RestTemplate;
 import org.testng.*;
 import org.testng.xml.XmlSuite;
@@ -50,61 +44,108 @@ import java.util.stream.Collectors;
  * @since 0.1
  */
 public class ReporterService extends AbstractReporter implements IReporter {
-    private static final Logger logger = LogManager.getLogger();
+    private static final Logger LOGGER = LogManager.getLogger();
     private final RestTemplate restTemplate = new RestTemplate();
     private final ExecutorService service = Executors.newCachedThreadPool();
-    private final HttpClient client = HttpClientBuilder.create().build();
 
     /**
-     * Submit all results asynchronously to remote storage with location at {@link #getUrl()}.
+     * Submit all results asynchronously to remote storage with location at {@link #getStorageConfig()}.
      * If a set of result fails to transmit, another attempt will be activated. However only one more chance will be
      * tried.
      */
     public void generateReport(List<XmlSuite> xmlSuites, List<ISuite> suites, String outputDirectory) {
-        List<Tuple2<TestCaseResult, Future<Boolean>>> futureTuples = new ArrayList<>();
+        List<Tuple2<CompleteResult, Future<ResponseEntity<String>>>> futureTuples = new ArrayList<>();
 
         for (ISuite suite : suites) {
             for (IInvokedMethod testCase : suite.getAllInvokedMethods()) {
                 ITestNGMethod method = testCase.getTestMethod();
                 CasePostProcessor processor = new CasePostProcessor(method);
-                TestCaseResult result = new TestCaseResult.TestCaseResultBuilder(method.getMethodName(),
-                        testCase.getTestResult().getEndMillis() - testCase.getTestResult().getStartMillis(),
-                        testCase.getTestResult().getStatus(), Reporter.getOutput(testCase.getTestResult()))
-                        .className(method.getTestClass().getName()).testName(testCase.getTestResult().getTestName())
-                        .suiteName(suite.getName()).configuration(testCase.isConfigurationMethod())
-                        .caseDescription(processor.getCaseDescription()).expectedResult(processor.getExpectedResult())
-                        .bug(processor.getBugInfo()).date(testCase.getDate()).createTestCaseResult();
-                if (logger.isDebugEnabled()) {
-                    logger.debug("Test case details about to send: {}", result);
-                }
-                futureTuples.add(new Tuple2<>(result, service.submit(new UploadResults(result))));
+                String className, testName, suiteName;
+                CompleteResult result =
+                    new CompleteResult.CompleteResultBuilder(getStorageConfig().getQueueTaskId())
+                        .withSuite(new SuiteResult(suiteName = suite.getName(),
+                            new TestResult(testName = testCase.getTestResult().getTestName(),
+                                new ClassResult(className = method.getTestClass().getName(),
+                                    new CaseResult.CaseResultBuilder(method.getMethodName(),
+                                        testCase.getTestResult().getEndMillis() -
+                                            testCase.getTestResult().getStartMillis(),
+                                        testCase.getTestResult().getStatus(),
+                                        Reporter.getOutput(testCase.getTestResult()), testCase.isConfigurationMethod())
+                                        .className(className).testName(testName).suiteName(suiteName)
+                                        .caseDescription(processor.getCaseDescription())
+                                        .expectedResult(processor.getExpectedResult())
+                                        .bug(processor.getBugInfo()).date(testCase.getDate())
+                                        .createTestCaseResult())))).build();
+                futureTuples.add(
+                    new Tuple2<>(result, service.submit(new UploadResults<>(getStorageConfig().getUrl(), result))));
             }
         }
 
-        // First round attempt to upload results, and for failed cases attempt once more
-        List<Future<Boolean>> futures = futureTuples.parallelStream()
-                .filter(f -> Try.of(() -> !f._2.get(5, TimeUnit.SECONDS))
-                        .onFailure(t -> logger.error("Failed to upload results to remote storage.", t)).orElse(true))
-                .map(f -> service.submit(new UploadResults(f._1))).collect(Collectors.toList());
+        List<Future<ResponseEntity<String>>> futures = futureTuples.parallelStream()
+            .filter(f -> Try.of(() -> !f._2.get(5, TimeUnit.SECONDS).getStatusCode().is2xxSuccessful())
+                .onFailure(t -> LOGGER.error("Failed to upload results to remote storage.", t))
+                .orElse(true)).map(f -> service.submit(new UploadResults<>(getStorageConfig().getUrl(), f._1)))
+            .collect(Collectors.toList());
 
         // Check if all attempts succeed, if not, prompt notice of errors
-        if (futures.size() > 0) {
-            long count = futures.parallelStream().filter(f -> Try.of(() -> !f.get(5, TimeUnit.SECONDS)).orElse(true))
-                    .count();
-            if (count > 0) {
-                logger.error("There are {} cases failed to upload to remote storage.", count);
-            } else {
-                logger.info("All test results have been successfully transmitted to remote storage.");
+        long count = futures.parallelStream().filter(
+            f -> Try.of(() -> !f.get(5, TimeUnit.SECONDS).getStatusCode().is2xxSuccessful()).orElse(true)).count();
+        if (count > 0) {
+            LOGGER.error("There are {} cases failed to upload to remote storage.", count);
+        } else {
+            LOGGER.info("All test case results have been successfully transmitted to remote storage");
+        }
+
+        // Publish end of transmission signal to remote storage
+        @JsonInclude(JsonInclude.Include.NON_NULL)
+        class ResultEntity {
+            long queueTaskId = getStorageConfig().getQueueTaskId();
+            String status = count > 0 ? "failure" : "success";
+            String error = count > 0 ? count + " case results failed to transmit to remote storage." : null;
+
+            long getQueueTaskId() {
+                return queueTaskId;
+            }
+
+            String getStatus() {
+                return status;
+            }
+
+            String getError() {
+                return error;
+            }
+
+            @Override
+            public String toString() {
+                return "ResultEntity{" +
+                    "queueTaskId=" + queueTaskId +
+                    ", status='" + status + '\'' +
+                    ", error='" + error + '\'' +
+                    '}';
             }
         }
 
         try {
+            Future<ResponseEntity<String>> future =
+                service.submit(new UploadResults<>(getStorageConfig().getEndUrl(), new ResultEntity()));
+            if (!future.get(5, TimeUnit.SECONDS).getStatusCode().is2xxSuccessful()) {
+                service.submit(new UploadResults<>(getStorageConfig().getEndUrl(), new ResultEntity()));
+            }
+        } catch (InterruptedException e) {
+            LOGGER.error("Async task has been interrupted", e);
+        } catch (ExecutionException e) {
+            LOGGER.error("Async task has been executed with errors, transmission is failed", e);
+        } catch (TimeoutException e) {
+            LOGGER.error("Remote server has not responded for 5 seconds, prepare to retransmit", e);
+        }
+
+        try {
             service.shutdown();
-            if (!service.awaitTermination(2, TimeUnit.SECONDS)) {
+            if (!service.awaitTermination(5, TimeUnit.SECONDS)) {
                 service.shutdownNow();
             }
         } catch (InterruptedException e) {
-            logger.error("Reporter service has been interrupted while shutting down", e);
+            LOGGER.error("Reporter service has been interrupted while shutting down", e);
         }
     }
 
@@ -127,11 +168,11 @@ public class ReporterService extends AbstractReporter implements IReporter {
         }
 
         String getCaseDescription() {
-            return Try.of(() -> method.getAnnotation(TestCase.class).value()).orElse("");
+            return Try.of(() -> method.getAnnotation(TestCase.class).value()).orElse(null);
         }
 
         String getExpectedResult() {
-            return Try.of(() -> method.getAnnotation(TestCase.class).expected()).orElse("");
+            return Try.of(() -> method.getAnnotation(TestCase.class).expected()).orElse(null);
         }
 
         String getBugInfo() {
@@ -140,41 +181,28 @@ public class ReporterService extends AbstractReporter implements IReporter {
     }
 
     /**
-     * Async callable service for uploading test results using {@link HttpClient}
+     * Async callable service for uploading test results.
      */
-    private class UploadResults implements Callable<Boolean> {
-        private final TestCaseResult result;
+    private class UploadResults<T> implements Callable<ResponseEntity<String>> {
+        private final T result;
+        private final String url;
 
-        UploadResults(TestCaseResult result) {
+        UploadResults(String url, T result) {
             this.result = result;
+            this.url = url;
         }
 
         /**
          * {@inheritDoc}
          */
         @Override
-        public Boolean call() throws Exception {
-            HttpPost post = new HttpPost(getUrl());
-            post.setEntity(new UrlEncodedFormEntity(Lists.newArrayList(new BasicNameValuePair("info_type", "json"),
-                    new BasicNameValuePair("other_info",
-                            new ObjectMapper().setSerializationInclusion(JsonInclude.Include.NON_NULL)
-                                    .writeValueAsString(result)), new BasicNameValuePair("queue_task_id", "1"),
-                    new BasicNameValuePair("task_id", "2"), new BasicNameValuePair("user_id", "3"),
-                    new BasicNameValuePair("user_name", "tester"),
-                    new BasicNameValuePair("script_name", result.getCaseName()),
-                    new BasicNameValuePair("testcase_no", result.getCaseName()),
-                    new BasicNameValuePair("testsuite_no", result.getSuiteName()),
-                    new BasicNameValuePair("testdescription", result.getCaseDescription()),
-                    new BasicNameValuePair("expect_result", result.getExpectedResult()),
-                    new BasicNameValuePair("actual_result", "n/a"),
-                    new BasicNameValuePair("is_success", String.valueOf(result.getStatus())),
-                    new BasicNameValuePair("run_time", String.valueOf(result.getDuration())))));
-            HttpResponse response = client.execute(post);
-            if (logger.isDebugEnabled()) {
-                logger.debug("Request sent: {}", post);
-                logger.debug("Response received: {}", response);
+        public ResponseEntity<String> call() throws Exception {
+            ResponseEntity<String> response = restTemplate.postForEntity(url, this.result, String.class);
+            if (LOGGER.isDebugEnabled()) {
+                LOGGER.debug("Test case result about to submit to: {} \n With an enclosing entity: {}", url, result);
+                LOGGER.debug("Remote storage responds: {}", response);
             }
-            return response.getStatusLine().getStatusCode() == 200;
+            return response;
         }
     }
 }
