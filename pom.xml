@@ -6,7 +6,7 @@
 
     <groupId>com.github.yongchristophertang</groupId>
     <artifactId>report-storage-iflytek</artifactId>
-    <version>0.2.1</version>
+    <version>0.2.2</version>
     <name>report-storage-iflytek</name>
     <packaging>jar</packaging>
     <description>A TestNG plugin for uploading test contexts to remote storage</description>
