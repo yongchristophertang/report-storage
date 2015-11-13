@@ -35,6 +35,7 @@ import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.*;
+import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
 /**
@@ -76,20 +77,24 @@ public class ReporterService extends AbstractReporter implements IReporter {
                                         .expectedResult(processor.getExpectedResult())
                                         .bug(processor.getBugInfo()).date(testCase.getDate())
                                         .createTestCaseResult())))).build();
+                // Send out test results asynchronously
                 futureTuples.add(
                     new Tuple2<>(result, service.submit(new UploadResults<>(getStorageConfig().getUrl(), result))));
             }
         }
 
-        List<Future<ResponseEntity<String>>> futures = futureTuples.parallelStream()
-            .filter(f -> Try.of(() -> !f._2.get(5, TimeUnit.SECONDS).getStatusCode().is2xxSuccessful())
+        Predicate<Tuple2<CompleteResult, Future<ResponseEntity<String>>>> predicate =
+            f -> Try.of(() -> !f._2.get(5, TimeUnit.SECONDS).getStatusCode().is2xxSuccessful())
                 .onFailure(t -> LOGGER.error("Failed to upload results to remote storage.", t))
-                .orElse(true)).map(f -> service.submit(new UploadResults<>(getStorageConfig().getUrl(), f._1)))
+                .orElse(true);
+
+        // Collect futures of remote responses, if failed send again.
+        futureTuples = futureTuples.parallelStream().filter(predicate)
+            .map(f -> new Tuple2<>(f._1, service.submit(new UploadResults<>(getStorageConfig().getUrl(), f._1))))
             .collect(Collectors.toList());
 
         // Check if all attempts succeed, if not, prompt notice of errors
-        long count = futures.parallelStream().filter(
-            f -> Try.of(() -> !f.get(5, TimeUnit.SECONDS).getStatusCode().is2xxSuccessful()).orElse(true)).count();
+        long count = futureTuples.parallelStream().filter(predicate).count();
         if (count > 0) {
             LOGGER.error("There are {} cases failed to upload to remote storage.", count);
         } else {
@@ -103,15 +108,15 @@ public class ReporterService extends AbstractReporter implements IReporter {
             String status = count > 0 ? "failure" : "success";
             String error = count > 0 ? count + " case results failed to transmit to remote storage." : null;
 
-            long getQueueTaskId() {
+            public long getQueueTaskId() {
                 return queueTaskId;
             }
 
-            String getStatus() {
+            public String getStatus() {
                 return status;
             }
 
-            String getError() {
+            public String getError() {
                 return error;
             }
 
